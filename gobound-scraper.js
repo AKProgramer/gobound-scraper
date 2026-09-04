@@ -1,5 +1,63 @@
 const puppeteer = require('puppeteer');
 
+function toSportSlug(name) {
+  if (!name) return null;
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-'); // "Boys Soccer" -> "boys-soccer", "Football" -> "football"
+}
+
+function parseScores(html) {
+  const sportMatch = html.match(/<title>Bound \| High school sports - ([^<]+)<\/title>/);
+  const sportSeason = sportMatch ? sportMatch[1].trim() : null; // e.g. "Boys Soccer 2026-27"
+
+  // Just the sport name, e.g. "Boys Soccer" (strip trailing season)
+  const sportName = sportSeason ? sportSeason.replace(/\s+\d{4}-\d{2}\s*$/, '').trim() : null;
+  const sport = toSportSlug(sportName); // "football" | "volleyball" | "boys-soccer" | ...
+
+  const dateMatch = html.match(/dropdown-toggle"[^>]*>\s*([^<]+?)\s*</);
+  const selectedDate = dateMatch ? dateMatch[1].trim() : null; // e.g. "September 4, 2026"
+
+  const rowRegex = /<tr class="js-click-row show-pointer[^"]*" data-id="([^"]+)">([\s\S]*?)<\/tr>/g;
+
+  const games = [];
+  let m;
+  while ((m = rowRegex.exec(html)) !== null) {
+    const block = m[2];
+
+    const cellRegex = /<td[^>]*>([\s\S]*?)<\/td>/g;
+    const cells = [];
+    let c;
+    while ((c = cellRegex.exec(block)) !== null) {
+      cells.push(c[1]);
+    }
+
+    const matchupCell = cells[1] || '';
+    const spanTexts = [...matchupCell.matchAll(/<span>\s*([^<]*?)\s*<\/span>/g)].map(s => s[1].trim());
+    const homeSchool = spanTexts[0] || null;
+    const awaySchool = spanTexts[2] || (spanTexts[1] && spanTexts[1] !== 'vs.' ? spanTexts[1] : null);
+
+    const location = cells[3] ? cells[3].replace(/\s+/g, ' ').trim() : null;
+
+    const timeMatch = cells[4] ? cells[4].match(/<span>\s*([^<]*?)\s*<\/span>/) : null;
+    const time = timeMatch ? timeMatch[1].trim() : null;
+
+    const result = cells[5] ? cells[5].replace(/\s+/g, ' ').trim() : null;
+
+    games.push({
+      sport,
+      homeSchool,
+      awaySchool,
+      venue: location || null,
+      time,
+      result: result || null
+    });
+  }
+
+  return { sportSeason, selectedDate, games };
+}
+
 async function scrape(url, opts = {}) {
   const {
     blockAssets = true,
@@ -62,10 +120,13 @@ async function scrape(url, opts = {}) {
     }
 
     const html = await page.content();
+    const parsed = parseScores(html);
 
     return {
       url,
-      html,
+      sportSeason: parsed.sportSeason,
+      selectedDate: parsed.selectedDate,
+      games: parsed.games,
       executionTime: Date.now() - start,
     };
   } finally {
@@ -164,7 +225,8 @@ if (require.main === module) {
 
     if (outPath) {
       require('fs').writeFileSync(outPath, json, 'utf8');
-      console.error(`Saved HTML (${data.html.length} chars) to ${outPath}`);
+      const count = isComp ? (data.html ? data.html.length + ' chars' : '0') : `${data.games.length} game(s)`;
+      console.error(`Saved ${count} to ${outPath}`);
     } else {
       console.log(json);
     }
