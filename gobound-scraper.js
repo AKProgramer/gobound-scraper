@@ -26,9 +26,9 @@ function extractGames() {
     const cellText = (i) =>
       cells[i] ? cells[i].textContent.replace(/\s+/g, ' ').trim() : '';
 
-    const location = cellText(2);
-    const time = cellText(3);
-    const result = cellText(4);
+    const location = cellText(3);
+    const time = cellText(4);
+    const result = cellText(5);
 
     const ticketEl = row.querySelector('a[href*="/tickets"]');
     const ticketUrl = ticketEl ? ticketEl.getAttribute('href') || '' : '';
