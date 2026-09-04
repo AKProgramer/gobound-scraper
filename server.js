@@ -1,6 +1,6 @@
 require('dotenv').config();
 const express = require('express');
-const { scrape } = require('./gobound-scraper');
+const { scrape, scrapeComp } = require('./gobound-scraper');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -35,8 +35,10 @@ app.get('/scrape', requireApiKey, async (req, res) => {
     return res.status(400).json({ error: 'Provide a valid "url" query param pointing to a gobound.com page' });
   }
 
+  const isComp = /\/comps\//.test(url);
+
   try {
-    const data = await enqueue(() => scrape(url));
+    const data = await enqueue(() => (isComp ? scrapeComp(url) : scrape(url)));
     res.json(data);
   } catch (err) {
     console.error('Scrape failed:', err);
